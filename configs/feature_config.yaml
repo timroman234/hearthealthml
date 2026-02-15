@@ -1,0 +1,132 @@
+# Feature Definitions and Engineering Rules
+
+feature_definitions:
+  age:
+    type: continuous
+    description: "Age in years"
+    range: [0, 120]
+
+  sex:
+    type: binary
+    description: "Sex (0=female, 1=male)"
+    values: [0, 1]
+
+  cp:
+    type: categorical
+    description: "Chest pain type"
+    values: [0, 1, 2, 3]
+    labels:
+      0: typical_angina
+      1: atypical_angina
+      2: non_anginal
+      3: asymptomatic
+
+  trestbps:
+    type: continuous
+    description: "Resting blood pressure (mm Hg)"
+    range: [0, 300]
+
+  chol:
+    type: continuous
+    description: "Serum cholesterol (mg/dl)"
+    range: [0, 600]
+
+  fbs:
+    type: binary
+    description: "Fasting blood sugar > 120 mg/dl"
+    values: [0, 1]
+
+  restecg:
+    type: categorical
+    description: "Resting ECG results"
+    values: [0, 1, 2]
+    labels:
+      0: normal
+      1: st_t_abnormality
+      2: lv_hypertrophy
+
+  thalach:
+    type: continuous
+    description: "Maximum heart rate achieved"
+    range: [0, 250]
+
+  exang:
+    type: binary
+    description: "Exercise induced angina"
+    values: [0, 1]
+
+  oldpeak:
+    type: continuous
+    description: "ST depression induced by exercise"
+    range: [0, 10]
+
+  slope:
+    type: categorical
+    description: "Slope of peak exercise ST segment"
+    values: [0, 1, 2]
+    labels:
+      0: upsloping
+      1: flat
+      2: downsloping
+
+  ca:
+    type: categorical
+    description: "Number of major vessels (fluoroscopy)"
+    values: [0, 1, 2, 3, 4]
+
+  thal:
+    type: categorical
+    description: "Thalassemia type"
+    values: [0, 1, 2, 3]
+    labels:
+      0: normal
+      1: fixed_defect
+      2: reversible_defect
+      3: unknown
+
+  target:
+    type: binary
+    description: "Heart disease presence"
+    values: [0, 1]
+    labels:
+      0: healthy
+      1: heart_disease
+
+engineered_features:
+  age_group:
+    source: age
+    type: categorical
+    bins: [0, 40, 55, 70, 120]
+    labels: [young, middle, senior, elderly]
+
+  bp_category:
+    source: trestbps
+    type: categorical
+    thresholds:
+      normal: "<120"
+      elevated: "120-129"
+      high_stage1: "130-139"
+      high_stage2: ">=140"
+
+  cholesterol_risk:
+    source: chol
+    type: categorical
+    thresholds:
+      desirable: "<200"
+      borderline: "200-239"
+      high: ">=240"
+
+  heart_rate_reserve:
+    sources: [age, thalach]
+    type: continuous
+    formula: "(220 - age) - thalach"
+
+  cardiac_risk_score:
+    sources: [age, sex, cp, trestbps, chol, fbs, exang, oldpeak, ca]
+    type: continuous
+    description: "Composite cardiac risk score (0-13)"
+
+feature_selection:
+  correlation_threshold: 0.9
+  variance_threshold: 0.01
+  rfe_n_features: 10

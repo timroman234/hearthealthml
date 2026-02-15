@@ -1,0 +1,70 @@
+# HeartHealthML Pipeline Configuration
+
+data:
+  raw_path: "data/raw/heart_disease_data.csv"
+  processed_path: "data/processed/"
+  splits_path: "data/splits/"
+
+features:
+  continuous:
+    - age
+    - trestbps
+    - chol
+    - thalach
+    - oldpeak
+  binary:
+    - sex
+    - fbs
+    - exang
+  categorical:
+    - cp
+    - restecg
+    - slope
+    - ca
+    - thal
+  target: target
+
+  engineering:
+    enabled: true
+    create_age_groups: true
+    create_bp_category: true
+    create_cholesterol_risk: true
+    create_heart_rate_reserve: true
+    create_cardiac_risk_score: true
+    interaction_features:
+      - [age, thalach]
+      - [oldpeak, slope]
+
+preprocessing:
+  scaler: standard  # standard, robust, minmax
+  encoder: onehot   # onehot, ordinal
+  handle_missing: drop  # drop, impute_mean, impute_median
+
+splitting:
+  train_ratio: 0.70
+  val_ratio: 0.15
+  test_ratio: 0.15
+  random_state: 42
+  stratify: true
+
+training:
+  default_model: logistic_regression
+  cv_folds: 5
+  random_state: 42
+
+evaluation:
+  primary_metric: roc_auc
+  threshold: 0.5
+  optimize_threshold: true
+  threshold_metric: f1  # f1, recall, precision
+
+output:
+  models_dir: "models/"
+  reports_dir: "reports/"
+  figures_dir: "reports/figures/"
+  metrics_dir: "reports/metrics/"
+
+logging:
+  level: INFO
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "logs/pipeline.log"
