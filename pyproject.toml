@@ -1,22 +1,66 @@
 [project]
 name = "hearthealthml"
 version = "0.1.0"
-description = "Heart disease prediction ML pipeline using logistic regression"
+description = "Heart disease prediction ML pipeline with MLOps"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 dependencies = [
-    "ipykernel>=7.2.0",
+    # Core ML
+    "scikit-learn>=1.3.0",
     "pandas>=2.0.0",
     "numpy>=1.24.0",
-    "scikit-learn>=1.3.0",
-    "pyyaml>=6.0",
     "joblib>=1.3.0",
+
+    # Visualization
     "matplotlib>=3.7.0",
     "seaborn>=0.12.0",
+
+    # Configuration
+    "pyyaml>=6.0",
+
+    # MLOps - Experiment Tracking
+    "mlflow>=2.9.0",
+
+    # MLOps - Data Versioning
+    "dvc>=3.30.0",
+    "dvc-s3>=3.0.0",  # For AWS S3 remote storage
+
+    # MLOps - API Serving
+    "fastapi>=0.104.0",
+    "uvicorn>=0.24.0",
+    "pydantic>=2.5.0",
+
+    # MLOps - Data Validation
+    "great-expectations>=0.18.0",
+
+    # MLOps - Monitoring
+    "prometheus-client>=0.19.0",
+
+    # Jupyter support
+    "ipykernel>=7.2.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
+    "pre-commit>=3.6.0",
+    "black>=23.12.0",
+    "ruff>=0.1.8",
+    "mypy>=1.7.0",
+    "httpx>=0.25.0",  # For API testing
 ]
+
+[tool.black]
+line-length = 88
+target-version = ['py311']
+
+[tool.ruff]
+line-length = 88
+select = ["E", "F", "I", "N", "W"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_ignores = true

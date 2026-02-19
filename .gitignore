@@ -1,3 +1,9 @@
+# Environment and secrets
+.env
+.env.*
+*.pem
+credentials.json
+
 # Python-generated files
 __pycache__/
 *.py[oc]
