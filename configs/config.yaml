@@ -68,3 +68,9 @@ logging:
   level: INFO
   format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
   file: "logs/pipeline.log"
+
+mlflow:
+  tracking_uri: "http://localhost:5000"
+  experiment_name: "hearthealthml"
+  registry_uri: "sqlite:///mlflow.db"
+  artifact_location: "./mlruns"

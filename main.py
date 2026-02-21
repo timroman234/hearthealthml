@@ -6,6 +6,9 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+import mlflow
+import mlflow.sklearn
+
 from src.data.loader import load_raw_data, validate_schema
 from src.data.preprocessor import (
     check_missing_values,
@@ -53,178 +56,238 @@ def main(config_path: str | None = None, tune: bool = False) -> dict:
     else:
         config = get_config("config")
 
-    # Stage 1: Data Loading
-    logger.info("Stage 1: Loading data")
-    raw_path = Path(config["data"]["raw_path"])
-    df = load_raw_data(raw_path)
-    validate_schema(df)
+    # Setup MLflow
+    mlflow_config = config.get("mlflow", {})
+    tracking_uri = mlflow_config.get("tracking_uri", "http://localhost:5000")
+    experiment_name = mlflow_config.get("experiment_name", "hearthealthml")
 
-    # Stage 2: Data Validation
-    logger.info("Stage 2: Validating data")
-    missing = check_missing_values(df)
-    if missing:
-        logger.warning(f"Found missing values: {missing}")
-        # For now, drop rows with missing values
-        df = df.dropna()
-        logger.info(f"Dropped rows with missing values. New shape: {df.shape}")
+    mlflow.set_tracking_uri(tracking_uri)
+    mlflow.set_experiment(experiment_name)
+    logger.info(f"MLflow tracking URI: {tracking_uri}")
+    logger.info(f"MLflow experiment: {experiment_name}")
 
-    outliers = detect_outliers(df)
-    validation_errors = validate_ranges(df)
-    if validation_errors:
-        logger.warning(f"Validation errors: {validation_errors}")
+    # Start MLflow run
+    with mlflow.start_run() as run:
+        logger.info(f"MLflow run ID: {run.info.run_id}")
 
-    # Stage 3: Feature Engineering
-    logger.info("Stage 3: Engineering features")
-    fe_config = config["features"].get("engineering", {})
-    if fe_config.get("enabled", True):
-        df = engineer_features(
+        # Log pipeline parameters
+        mlflow.log_param("tune", tune)
+        mlflow.log_param("train_ratio", config["splitting"]["train_ratio"])
+        mlflow.log_param("val_ratio", config["splitting"]["val_ratio"])
+        mlflow.log_param("test_ratio", config["splitting"]["test_ratio"])
+        mlflow.log_param("random_state", config["splitting"]["random_state"])
+        mlflow.log_param("model_type", config["training"]["default_model"])
+        mlflow.log_param("scaler", config["preprocessing"]["scaler"])
+        mlflow.log_param("cv_folds", config["training"]["cv_folds"])
+
+        # Stage 1: Data Loading
+        logger.info("Stage 1: Loading data")
+        raw_path = Path(config["data"]["raw_path"])
+        df = load_raw_data(raw_path)
+        validate_schema(df)
+
+        # Stage 2: Data Validation
+        logger.info("Stage 2: Validating data")
+        missing = check_missing_values(df)
+        if missing:
+            logger.warning(f"Found missing values: {missing}")
+            # For now, drop rows with missing values
+            df = df.dropna()
+            logger.info(f"Dropped rows with missing values. New shape: {df.shape}")
+
+        outliers = detect_outliers(df)
+        validation_errors = validate_ranges(df)
+        if validation_errors:
+            logger.warning(f"Validation errors: {validation_errors}")
+
+        # Stage 3: Feature Engineering
+        logger.info("Stage 3: Engineering features")
+        fe_config = config["features"].get("engineering", {})
+        if fe_config.get("enabled", True):
+            df = engineer_features(
+                df,
+                create_age_group=fe_config.get("create_age_groups", True),
+                create_bp_cat=fe_config.get("create_bp_category", True),
+                create_chol_risk=fe_config.get("create_cholesterol_risk", True),
+                create_hr_reserve=fe_config.get("create_heart_rate_reserve", True),
+                create_risk_score=fe_config.get("create_cardiac_risk_score", True),
+                create_interactions=True,
+            )
+
+        # Stage 4: Data Splitting
+        logger.info("Stage 4: Splitting data")
+        target_col = config["features"]["target"]
+        splits = create_splits(
             df,
-            create_age_group=fe_config.get("create_age_groups", True),
-            create_bp_cat=fe_config.get("create_bp_category", True),
-            create_chol_risk=fe_config.get("create_cholesterol_risk", True),
-            create_hr_reserve=fe_config.get("create_heart_rate_reserve", True),
-            create_risk_score=fe_config.get("create_cardiac_risk_score", True),
-            create_interactions=True,
+            target_col=target_col,
+            train_ratio=config["splitting"]["train_ratio"],
+            val_ratio=config["splitting"]["val_ratio"],
+            test_ratio=config["splitting"]["test_ratio"],
+            random_state=config["splitting"]["random_state"],
         )
 
-    # Stage 4: Data Splitting
-    logger.info("Stage 4: Splitting data")
-    target_col = config["features"]["target"]
-    splits = create_splits(
-        df,
-        target_col=target_col,
-        train_ratio=config["splitting"]["train_ratio"],
-        val_ratio=config["splitting"]["val_ratio"],
-        test_ratio=config["splitting"]["test_ratio"],
-        random_state=config["splitting"]["random_state"],
-    )
+        # Save splits
+        splits_path = Path(config["data"]["splits_path"])
+        save_splits(splits, splits_path)
 
-    # Save splits
-    splits_path = Path(config["data"]["splits_path"])
-    save_splits(splits, splits_path)
+        # Log feature counts
+        mlflow.log_param("n_features", len(splits["X_train"].columns))
+        mlflow.log_param("n_train_samples", len(splits["X_train"]))
+        mlflow.log_param("n_val_samples", len(splits["X_val"]))
+        mlflow.log_param("n_test_samples", len(splits["X_test"]))
 
-    # Stage 5: Preprocessing
-    logger.info("Stage 5: Preprocessing features")
+        # Stage 5: Preprocessing
+        logger.info("Stage 5: Preprocessing features")
 
-    # Get feature lists (excluding engineered categorical features for simplicity)
-    continuous = config["features"]["continuous"]
-    binary = config["features"]["binary"]
-    categorical = config["features"]["categorical"]
+        # Get feature lists (excluding engineered categorical features for simplicity)
+        continuous = config["features"]["continuous"]
+        binary = config["features"]["binary"]
+        categorical = config["features"]["categorical"]
 
-    # Add numeric engineered features to continuous
-    engineered_numeric = ["heart_rate_reserve", "cardiac_risk_score"]
-    for feat in engineered_numeric:
-        if feat in splits["X_train"].columns:
-            continuous = continuous + [feat]
+        # Add numeric engineered features to continuous
+        engineered_numeric = ["heart_rate_reserve", "cardiac_risk_score"]
+        for feat in engineered_numeric:
+            if feat in splits["X_train"].columns:
+                continuous = continuous + [feat]
 
-    # Add interaction features to continuous
-    for col in splits["X_train"].columns:
-        if "_x_" in col and col not in continuous:
-            continuous = continuous + [col]
+        # Add interaction features to continuous
+        for col in splits["X_train"].columns:
+            if "_x_" in col and col not in continuous:
+                continuous = continuous + [col]
 
-    preprocessor = create_preprocessor(
-        continuous_features=[c for c in continuous if c in splits["X_train"].columns],
-        binary_features=[b for b in binary if b in splits["X_train"].columns],
-        categorical_features=[c for c in categorical if c in splits["X_train"].columns],
-        scaler=config["preprocessing"]["scaler"],
-    )
-
-    X_train = fit_transform_preprocessor(preprocessor, splits["X_train"])
-    X_val = transform_preprocessor(preprocessor, splits["X_val"])
-    X_test = transform_preprocessor(preprocessor, splits["X_test"])
-
-    y_train = splits["y_train"].values
-    y_val = splits["y_val"].values
-    y_test = splits["y_test"].values
-
-    # Save preprocessor
-    processed_path = Path(config["data"]["processed_path"])
-    processed_path.mkdir(parents=True, exist_ok=True)
-    save_preprocessor(preprocessor, processed_path / "preprocessor.joblib")
-
-    # Stage 6: Model Training
-    logger.info("Stage 6: Training model")
-    model_name = config["training"]["default_model"]
-
-    if tune:
-        # Stage 7: Hyperparameter Tuning
-        logger.info("Stage 7: Tuning hyperparameters")
-        tune_results = tune_hyperparameters(
-            model_name,
-            X_train,
-            y_train,
-            cv=config["training"]["cv_folds"],
-            scoring=config["evaluation"]["primary_metric"],
+        preprocessor = create_preprocessor(
+            continuous_features=[c for c in continuous if c in splits["X_train"].columns],
+            binary_features=[b for b in binary if b in splits["X_train"].columns],
+            categorical_features=[c for c in categorical if c in splits["X_train"].columns],
+            scaler=config["preprocessing"]["scaler"],
         )
-        model = tune_results["best_estimator"]
-        best_params = tune_results["best_params"]
-        logger.info(f"Best params: {best_params}")
-    else:
-        model = get_model(model_name)
-        model = train_model(model, X_train, y_train, X_val, y_val)
-        best_params = None
 
-    # Stage 8: Find Optimal Threshold
-    logger.info("Stage 8: Finding optimal threshold")
-    if config["evaluation"].get("optimize_threshold", False):
-        threshold = find_optimal_threshold(
-            model, X_val, y_val,
-            optimize_for=config["evaluation"].get("threshold_metric", "f1")
+        X_train = fit_transform_preprocessor(preprocessor, splits["X_train"])
+        X_val = transform_preprocessor(preprocessor, splits["X_val"])
+        X_test = transform_preprocessor(preprocessor, splits["X_test"])
+
+        y_train = splits["y_train"].values
+        y_val = splits["y_val"].values
+        y_test = splits["y_test"].values
+
+        # Save preprocessor
+        processed_path = Path(config["data"]["processed_path"])
+        processed_path.mkdir(parents=True, exist_ok=True)
+        save_preprocessor(preprocessor, processed_path / "preprocessor.joblib")
+
+        # Stage 6: Model Training
+        logger.info("Stage 6: Training model")
+        model_name = config["training"]["default_model"]
+
+        if tune:
+            # Stage 7: Hyperparameter Tuning
+            logger.info("Stage 7: Tuning hyperparameters")
+            tune_results = tune_hyperparameters(
+                model_name,
+                X_train,
+                y_train,
+                cv=config["training"]["cv_folds"],
+                scoring=config["evaluation"]["primary_metric"],
+            )
+            model = tune_results["best_estimator"]
+            best_params = tune_results["best_params"]
+            logger.info(f"Best params: {best_params}")
+            # Log tuned hyperparameters
+            for param_name, param_value in best_params.items():
+                mlflow.log_param(f"tuned_{param_name}", param_value)
+        else:
+            model = get_model(model_name)
+            model = train_model(model, X_train, y_train, X_val, y_val)
+            best_params = None
+
+        # Stage 8: Find Optimal Threshold
+        logger.info("Stage 8: Finding optimal threshold")
+        if config["evaluation"].get("optimize_threshold", False):
+            threshold = find_optimal_threshold(
+                model, X_val, y_val,
+                optimize_for=config["evaluation"].get("threshold_metric", "f1")
+            )
+        else:
+            threshold = config["evaluation"]["threshold"]
+
+        mlflow.log_param("threshold", threshold)
+
+        # Stage 9: Model Evaluation
+        logger.info("Stage 9: Evaluating model")
+        metrics = evaluate_model(model, X_test, y_test, threshold=threshold)
+
+        # Log metrics to MLflow
+        mlflow.log_metric("accuracy", metrics["accuracy"])
+        mlflow.log_metric("precision", metrics["precision"])
+        mlflow.log_metric("recall", metrics["recall"])
+        mlflow.log_metric("f1", metrics["f1"])
+        if "roc_auc" in metrics:
+            mlflow.log_metric("roc_auc", metrics["roc_auc"])
+
+        # Save evaluation plots
+        figures_dir = Path(config["output"]["figures_dir"])
+        figures_dir.mkdir(parents=True, exist_ok=True)
+
+        y_pred = (model.predict_proba(X_test)[:, 1] >= threshold).astype(int)
+        plot_confusion_matrix(y_test, y_pred, figures_dir / "confusion_matrix.png")
+        plot_roc_curve(model, X_test, y_test, figures_dir / "roc_curve.png")
+
+        # Log artifacts to MLflow
+        mlflow.log_artifact(str(figures_dir / "confusion_matrix.png"))
+        mlflow.log_artifact(str(figures_dir / "roc_curve.png"))
+        mlflow.log_artifact(str(processed_path / "preprocessor.joblib"))
+
+        # Save metrics
+        metrics_dir = Path(config["output"]["metrics_dir"])
+        metrics_dir.mkdir(parents=True, exist_ok=True)
+        with open(metrics_dir / "evaluation_metrics.json", "w") as f:
+            json.dump(metrics, f, indent=2, default=str)
+
+        mlflow.log_artifact(str(metrics_dir / "evaluation_metrics.json"))
+
+        # Stage 10: Register Model
+        logger.info("Stage 10: Registering model")
+        registry = ModelRegistry(Path(config["output"]["models_dir"]))
+
+        metadata = {
+            "model_name": model_name,
+            "features_used": list(splits["X_train"].columns),
+            "feature_engineering": fe_config.get("enabled", True),
+            "training_samples": len(X_train),
+            "validation_samples": len(X_val),
+            "test_samples": len(X_test),
+            "threshold": threshold,
+            "tuned": tune,
+            "best_params": best_params,
+        }
+
+        version = registry.register_model(model, preprocessor, metrics, metadata)
+
+        # Log model to MLflow Model Registry
+        mlflow.sklearn.log_model(
+            model,
+            artifact_path="model",
+            registered_model_name=f"hearthealthml-{model_name}",
         )
-    else:
-        threshold = config["evaluation"]["threshold"]
+        logger.info(f"Model logged to MLflow registry: hearthealthml-{model_name}")
 
-    # Stage 9: Model Evaluation
-    logger.info("Stage 9: Evaluating model")
-    metrics = evaluate_model(model, X_test, y_test, threshold=threshold)
+        # Summary
+        logger.info("=" * 60)
+        logger.info("Pipeline completed successfully!")
+        logger.info(f"Model: {model_name} v{version}")
+        logger.info(f"MLflow run ID: {run.info.run_id}")
+        logger.info(f"Test Accuracy: {metrics['accuracy']:.4f}")
+        logger.info(f"Test ROC-AUC: {metrics.get('roc_auc', 'N/A'):.4f}")
+        logger.info(f"Optimal Threshold: {threshold:.2f}")
+        logger.info("=" * 60)
 
-    # Save evaluation plots
-    figures_dir = Path(config["output"]["figures_dir"])
-    figures_dir.mkdir(parents=True, exist_ok=True)
-
-    y_pred = (model.predict_proba(X_test)[:, 1] >= threshold).astype(int)
-    plot_confusion_matrix(y_test, y_pred, figures_dir / "confusion_matrix.png")
-    plot_roc_curve(model, X_test, y_test, figures_dir / "roc_curve.png")
-
-    # Save metrics
-    metrics_dir = Path(config["output"]["metrics_dir"])
-    metrics_dir.mkdir(parents=True, exist_ok=True)
-    with open(metrics_dir / "evaluation_metrics.json", "w") as f:
-        json.dump(metrics, f, indent=2, default=str)
-
-    # Stage 10: Register Model
-    logger.info("Stage 10: Registering model")
-    registry = ModelRegistry(Path(config["output"]["models_dir"]))
-
-    metadata = {
-        "model_name": model_name,
-        "features_used": list(splits["X_train"].columns),
-        "feature_engineering": fe_config.get("enabled", True),
-        "training_samples": len(X_train),
-        "validation_samples": len(X_val),
-        "test_samples": len(X_test),
-        "threshold": threshold,
-        "tuned": tune,
-        "best_params": best_params,
-    }
-
-    version = registry.register_model(model, preprocessor, metrics, metadata)
-
-    # Summary
-    logger.info("=" * 60)
-    logger.info("Pipeline completed successfully!")
-    logger.info(f"Model: {model_name} v{version}")
-    logger.info(f"Test Accuracy: {metrics['accuracy']:.4f}")
-    logger.info(f"Test ROC-AUC: {metrics.get('roc_auc', 'N/A'):.4f}")
-    logger.info(f"Optimal Threshold: {threshold:.2f}")
-    logger.info("=" * 60)
-
-    return {
-        "model_name": model_name,
-        "version": version,
-        "metrics": metrics,
-        "threshold": threshold,
-    }
+        return {
+            "model_name": model_name,
+            "version": version,
+            "metrics": metrics,
+            "threshold": threshold,
+            "mlflow_run_id": run.info.run_id,
+        }
 
 
 if __name__ == "__main__":
@@ -246,5 +309,6 @@ if __name__ == "__main__":
 
     print(f"\nPipeline Results:")
     print(f"  Model: {results['model_name']} v{results['version']}")
+    print(f"  MLflow Run ID: {results['mlflow_run_id']}")
     print(f"  Test Accuracy: {results['metrics']['accuracy']:.4f}")
     print(f"  Test ROC-AUC: {results['metrics'].get('roc_auc', 'N/A'):.4f}")

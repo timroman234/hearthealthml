@@ -41,3 +41,7 @@ logs/*
 
 # Learning documentation (personal notes)
 MLOPS_WORKFLOW.md
+
+# MLflow
+mlflow.db
+mlruns/
