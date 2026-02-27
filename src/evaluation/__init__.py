@@ -2,9 +2,9 @@
 
 from .evaluate import (
     evaluate_model,
+    find_optimal_threshold,
     plot_confusion_matrix,
     plot_roc_curve,
-    find_optimal_threshold,
 )
 from .metrics import (
     calculate_all_metrics,

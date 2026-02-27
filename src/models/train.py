@@ -41,9 +41,7 @@ PARAM_GRIDS = {
 }
 
 
-def get_model(
-    model_name: str, params: dict | None = None
-) -> BaseEstimator:
+def get_model(model_name: str, params: dict | None = None) -> BaseEstimator:
     """Factory function to create model instances.
 
     Args:

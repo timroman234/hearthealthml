@@ -100,9 +100,7 @@ def detect_outliers(
     return outlier_mask
 
 
-def validate_ranges(
-    df: pd.DataFrame, rules: dict | None = None
-) -> list[str]:
+def validate_ranges(df: pd.DataFrame, rules: dict | None = None) -> list[str]:
     """Validate values are within expected ranges.
 
     Args:
@@ -193,7 +191,14 @@ def create_preprocessor(
     continuous_transformer = Pipeline([("scaler", scaler_obj)])
 
     categorical_transformer = Pipeline(
-        [("encoder", OneHotEncoder(drop="first", sparse_output=False, handle_unknown="ignore"))]
+        [
+            (
+                "encoder",
+                OneHotEncoder(
+                    drop="first", sparse_output=False, handle_unknown="ignore"
+                ),
+            )
+        ]
     )
 
     preprocessor = ColumnTransformer(

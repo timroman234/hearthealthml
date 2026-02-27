@@ -45,3 +45,4 @@ MLOPS_WORKFLOW.md
 # MLflow
 mlflow.db
 mlruns/
+mlartifacts/

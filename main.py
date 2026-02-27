@@ -5,7 +5,6 @@ import argparse
 import io
 import json
 import sys
-from datetime import datetime
 from pathlib import Path
 
 # Fix Windows console encoding for MLflow emoji output
@@ -38,7 +37,7 @@ from src.features.build_features import engineer_features
 from src.models.registry import ModelRegistry
 from src.models.train import get_model, train_model, tune_hyperparameters
 from src.utils.config import get_config
-from src.utils.logger import get_logger, setup_logger
+from src.utils.logger import setup_logger
 
 
 def main(config_path: str | None = None, tune: bool = False) -> dict:
@@ -60,6 +59,7 @@ def main(config_path: str | None = None, tune: bool = False) -> dict:
     # Load config
     if config_path:
         from src.utils.config import load_config
+
         config = load_config(Path(config_path))
     else:
         config = get_config("config")
@@ -103,7 +103,10 @@ def main(config_path: str | None = None, tune: bool = False) -> dict:
             df = df.dropna()
             logger.info(f"Dropped rows with missing values. New shape: {df.shape}")
 
-        outliers = detect_outliers(df)
+        outlier_mask = detect_outliers(df)
+        n_outliers = outlier_mask.any(axis=1).sum()
+        if n_outliers > 0:
+            logger.info(f"Detected {n_outliers} rows with outliers")
         validation_errors = validate_ranges(df)
         if validation_errors:
             logger.warning(f"Validation errors: {validation_errors}")
@@ -164,9 +167,13 @@ def main(config_path: str | None = None, tune: bool = False) -> dict:
                 continuous = continuous + [col]
 
         preprocessor = create_preprocessor(
-            continuous_features=[c for c in continuous if c in splits["X_train"].columns],
+            continuous_features=[
+                c for c in continuous if c in splits["X_train"].columns
+            ],
             binary_features=[b for b in binary if b in splits["X_train"].columns],
-            categorical_features=[c for c in categorical if c in splits["X_train"].columns],
+            categorical_features=[
+                c for c in categorical if c in splits["X_train"].columns
+            ],
             scaler=config["preprocessing"]["scaler"],
         )
 
@@ -212,8 +219,10 @@ def main(config_path: str | None = None, tune: bool = False) -> dict:
         logger.info("Stage 8: Finding optimal threshold")
         if config["evaluation"].get("optimize_threshold", False):
             threshold = find_optimal_threshold(
-                model, X_val, y_val,
-                optimize_for=config["evaluation"].get("threshold_metric", "f1")
+                model,
+                X_val,
+                y_val,
+                optimize_for=config["evaluation"].get("threshold_metric", "f1"),
             )
         else:
             threshold = config["evaluation"]["threshold"]
@@ -315,7 +324,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     results = main(config_path=args.config, tune=args.tune)
 
-    print(f"\nPipeline Results:")
+    print("\nPipeline Results:")
     print(f"  Model: {results['model_name']} v{results['version']}")
     print(f"  MLflow Run ID: {results['mlflow_run_id']}")
     print(f"  Test Accuracy: {results['metrics']['accuracy']:.4f}")
