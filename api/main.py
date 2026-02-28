@@ -1,47 +1,53 @@
 """FastAPI application for HeartHealthML predictions."""
 
+import os
 import sys
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+import numpy as np
+import pandas as pd
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
+from starlette.responses import Response
 
 # Add project root to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from api.dependencies import ModelLoader, get_model_loader, get_uptime
 from api.models import (
+    BatchPredictionRequest,
+    BatchPredictionResponse,
     ErrorResponse,
     HealthResponse,
+    ModelInfoResponse,
     PatientFeatures,
     PredictionResponse,
+    RiskLevel,
 )
 from src.features.build_features import engineer_features
-from src.models.predict import load_production_model, predict_single
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-# Global model state
-_model_state = {
-    "model": None,
-    "preprocessor": None,
-    "version": None,
-    "threshold": 0.5,
-}
-
-
-def load_model():
-    """Load the production model into memory."""
-    try:
-        model, preprocessor = load_production_model()
-        _model_state["model"] = model
-        _model_state["preprocessor"] = preprocessor
-        _model_state["version"] = "latest"
-        logger.info("Model loaded successfully")
-        return True
-    except Exception as e:
-        logger.error(f"Failed to load model: {e}")
-        return False
+# Prometheus metrics
+PREDICTIONS_TOTAL = Counter(
+    "hearthealthml_predictions_total",
+    "Total number of predictions made",
+    ["risk_level"],
+)
+PREDICTION_LATENCY = Histogram(
+    "hearthealthml_prediction_latency_seconds",
+    "Time spent processing prediction requests",
+    buckets=[0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0],
+)
+REQUESTS_TOTAL = Counter(
+    "hearthealthml_requests_total",
+    "Total HTTP requests",
+    ["method", "endpoint", "status"],
+)
 
 
 @asynccontextmanager
@@ -49,36 +55,148 @@ async def lifespan(app: FastAPI):
     """Application lifespan handler for startup/shutdown."""
     # Startup: Load model
     logger.info("Starting HeartHealthML API...")
-    load_model()
+    loader = get_model_loader()
+    if loader.is_loaded:
+        logger.info(f"Model loaded: version {loader.version}")
+    else:
+        logger.warning("Model not loaded - check model files")
     yield
     # Shutdown: Cleanup
     logger.info("Shutting down HeartHealthML API...")
 
 
+# Create FastAPI app
 app = FastAPI(
     title="HeartHealthML API",
     description="Heart disease prediction API using machine learning",
-    version="0.1.0",
+    version="1.0.0",
     lifespan=lifespan,
     responses={
         500: {"model": ErrorResponse, "description": "Internal server error"},
     },
 )
 
-
-@app.get(
-    "/health",
-    response_model=HealthResponse,
-    tags=["System"],
-    summary="Health check endpoint",
+# CORS middleware for cross-origin requests
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=os.getenv("CORS_ORIGINS", "*").split(","),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
-async def health_check():
-    """Check API health and model status."""
-    model_loaded = _model_state["model"] is not None
+
+
+@app.middleware("http")
+async def track_requests(request: Request, call_next):
+    """Track request metrics for Prometheus."""
+    start_time = time.time()
+    response = await call_next(request)
+
+    # Track request metrics
+    REQUESTS_TOTAL.labels(
+        method=request.method,
+        endpoint=request.url.path,
+        status=response.status_code,
+    ).inc()
+
+    # Log slow requests
+    duration = time.time() - start_time
+    if duration > 1.0:
+        logger.warning(
+            f"Slow request: {request.method} {request.url.path} ({duration:.2f}s)"
+        )
+
+    return response
+
+
+def calculate_risk_level(probability: float) -> RiskLevel:
+    """Calculate risk level from probability.
+
+    Args:
+        probability: Prediction probability.
+
+    Returns:
+        RiskLevel enum value.
+    """
+    if probability >= 0.7:
+        return RiskLevel.HIGH
+    elif probability >= 0.3:
+        return RiskLevel.MEDIUM
+    return RiskLevel.LOW
+
+
+def preprocess_patient(patient: PatientFeatures, preprocessor) -> np.ndarray:
+    """Preprocess patient data for prediction.
+
+    Args:
+        patient: Patient features.
+        preprocessor: Fitted preprocessor.
+
+    Returns:
+        Preprocessed feature array.
+    """
+    # Convert to DataFrame
+    df = pd.DataFrame([patient.model_dump()])
+
+    # Apply feature engineering
+    df = engineer_features(df)
+
+    # Apply preprocessing
+    return preprocessor.transform(df)
+
+
+@app.get("/health", response_model=HealthResponse, tags=["System"])
+async def health_check(loader: ModelLoader = Depends(get_model_loader)):
+    """Health check endpoint.
+
+    Returns the current health status of the API including model status and uptime.
+    """
     return HealthResponse(
-        status="healthy" if model_loaded else "unhealthy",
-        model_loaded=model_loaded,
-        model_version=_model_state["version"],
+        status="healthy" if loader.is_loaded else "unhealthy",
+        model_loaded=loader.is_loaded,
+        model_version=loader.version if loader.is_loaded else None,
+        uptime_seconds=get_uptime(),
+    )
+
+
+@app.get("/metrics", tags=["Monitoring"])
+async def metrics():
+    """Prometheus metrics endpoint.
+
+    Returns metrics in Prometheus text format for scraping.
+    """
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+@app.get("/model-info", response_model=ModelInfoResponse, tags=["Model"])
+async def model_info(loader: ModelLoader = Depends(get_model_loader)):
+    """Get model information.
+
+    Returns details about the currently loaded model including version,
+    features, performance metrics, and classification threshold.
+    """
+    if not loader.is_loaded:
+        raise HTTPException(
+            status_code=503,
+            detail="Model not loaded. Please check /health endpoint.",
+        )
+
+    metadata = loader.metadata
+
+    # Get feature names from preprocessor if available
+    features = metadata.get("features_used", [])
+    if not features and loader.preprocessor is not None:
+        try:
+            features = list(loader.preprocessor.feature_names_in_)
+        except AttributeError:
+            features = []
+
+    return ModelInfoResponse(
+        model_name=metadata.get("model_name", "logistic_regression"),
+        version=loader.version,
+        features=features,
+        metrics=metadata.get("metrics", {}),
+        threshold=metadata.get("optimal_threshold", 0.5),
     )
 
 
@@ -86,73 +204,138 @@ async def health_check():
     "/predict",
     response_model=PredictionResponse,
     tags=["Predictions"],
-    summary="Make a heart disease prediction",
     responses={
         503: {"model": ErrorResponse, "description": "Model not loaded"},
     },
 )
-async def predict(patient: PatientFeatures):
-    """
-    Make a heart disease prediction for a single patient.
+async def predict(
+    patient: PatientFeatures,
+    loader: ModelLoader = Depends(get_model_loader),
+):
+    """Make a prediction for a single patient.
 
     The model predicts the probability of heart disease based on
     clinical features. Returns a binary prediction, probability,
-    and risk level (low/medium/high).
+    risk level, and model confidence.
     """
-    if _model_state["model"] is None:
+    if not loader.is_loaded:
         raise HTTPException(
             status_code=503,
             detail="Model not loaded. Please check /health endpoint.",
         )
 
-    try:
-        # Convert to dict and apply feature engineering
-        import pandas as pd
+    with PREDICTION_LATENCY.time():
+        try:
+            model = loader.model
+            preprocessor = loader.preprocessor
+            threshold = loader.metadata.get("optimal_threshold", 0.5)
 
-        patient_dict = patient.model_dump()
-        df = pd.DataFrame([patient_dict])
+            # Preprocess patient data
+            X = preprocess_patient(patient, preprocessor)
 
-        # Apply feature engineering (same as training)
-        df = engineer_features(df)
+            # Make prediction
+            probability = float(model.predict_proba(X)[0, 1])
+            prediction = int(probability >= threshold)
+            risk_level = calculate_risk_level(probability)
+            confidence = probability if prediction == 1 else (1 - probability)
 
-        # Convert back to dict for prediction
-        engineered_patient = df.iloc[0].to_dict()
+            # Track metrics
+            PREDICTIONS_TOTAL.labels(risk_level=risk_level.value).inc()
 
-        # Make prediction
-        result = predict_single(
-            model=_model_state["model"],
-            preprocessor=_model_state["preprocessor"],
-            patient_data=engineered_patient,
-            threshold=_model_state["threshold"],
-        )
+            return PredictionResponse(
+                prediction=prediction,
+                prediction_label="heart_disease" if prediction == 1 else "healthy",
+                probability=probability,
+                risk_level=risk_level,
+                confidence=confidence,
+                threshold_used=threshold,
+            )
 
-        return PredictionResponse(**result)
-
-    except Exception as e:
-        logger.error(f"Prediction failed: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Prediction failed: {str(e)}",
-        )
+        except Exception as e:
+            logger.error(f"Prediction error: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post(
-    "/reload",
-    tags=["System"],
-    summary="Reload the model",
+    "/predict/batch",
+    response_model=BatchPredictionResponse,
+    tags=["Predictions"],
     responses={
-        503: {"model": ErrorResponse, "description": "Model reload failed"},
+        503: {"model": ErrorResponse, "description": "Model not loaded"},
     },
 )
-async def reload_model():
-    """Reload the production model from disk."""
-    success = load_model()
-    if not success:
+async def predict_batch(
+    request: BatchPredictionRequest,
+    loader: ModelLoader = Depends(get_model_loader),
+):
+    """Make predictions for multiple patients.
+
+    Accepts a batch of patient records and returns predictions for all.
+    Maximum batch size is 100 patients.
+    """
+    if not loader.is_loaded:
         raise HTTPException(
             status_code=503,
-            detail="Failed to reload model. Check logs for details.",
+            detail="Model not loaded. Please check /health endpoint.",
         )
-    return {
-        "message": "Model reloaded successfully",
-        "version": _model_state["version"],
-    }
+
+    predictions = []
+    high_risk_count = 0
+
+    for patient in request.patients:
+        try:
+            result = await predict(patient, loader)
+            predictions.append(result)
+            if result.risk_level == RiskLevel.HIGH:
+                high_risk_count += 1
+        except HTTPException:
+            # Add error placeholder for failed predictions
+            predictions.append(
+                PredictionResponse(
+                    prediction=-1,
+                    prediction_label="error",
+                    probability=0.0,
+                    risk_level=RiskLevel.LOW,
+                    confidence=0.0,
+                    threshold_used=0.5,
+                )
+            )
+
+    return BatchPredictionResponse(
+        predictions=predictions,
+        total_count=len(predictions),
+        high_risk_count=high_risk_count,
+    )
+
+
+@app.post("/reload", tags=["System"])
+async def reload_model(loader: ModelLoader = Depends(get_model_loader)):
+    """Reload the production model from disk.
+
+    Forces a reload of the model even if already loaded.
+    Useful after deploying a new model version.
+    """
+    try:
+        loader.reload()
+        logger.info(f"Model reloaded: version {loader.version}")
+        return {
+            "message": "Model reloaded successfully",
+            "version": loader.version,
+        }
+    except Exception as e:
+        logger.error(f"Failed to reload model: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail=f"Failed to reload model: {str(e)}",
+        )
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(
+        "api.main:app",
+        host=os.getenv("API_HOST", "0.0.0.0"),
+        port=int(os.getenv("API_PORT", 8000)),
+        reload=True,
+    )
