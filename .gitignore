@@ -1,3 +1,9 @@
+# Environment and secrets
+.env
+.env.*
+*.pem
+credentials.json
+
 # Python-generated files
 __pycache__/
 *.py[oc]
@@ -35,3 +41,8 @@ logs/*
 
 # Learning documentation (personal notes)
 MLOPS_WORKFLOW.md
+
+# MLflow
+mlflow.db
+mlruns/
+mlartifacts/

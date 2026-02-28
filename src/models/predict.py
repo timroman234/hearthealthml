@@ -108,9 +108,7 @@ def predict_batch(
     results = df.copy()
     results["prediction"] = predictions
     results["probability"] = probas
-    results["prediction_label"] = np.where(
-        predictions == 1, "heart_disease", "healthy"
-    )
+    results["prediction_label"] = np.where(predictions == 1, "heart_disease", "healthy")
     results["risk_level"] = pd.cut(
         probas,
         bins=[0, 0.3, 0.7, 1.0],

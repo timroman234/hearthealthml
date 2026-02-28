@@ -48,8 +48,10 @@ def evaluate_model(
         y_test, y_pred, output_dict=True
     )
 
-    logger.info(f"Evaluation metrics: accuracy={metrics['accuracy']:.4f}, "
-                f"roc_auc={metrics.get('roc_auc', 'N/A'):.4f}")
+    logger.info(
+        f"Evaluation metrics: accuracy={metrics['accuracy']:.4f}, "
+        f"roc_auc={metrics.get('roc_auc', 'N/A'):.4f}"
+    )
 
     return metrics
 
@@ -76,8 +78,10 @@ def evaluate_medical(
 
     metrics = calculate_medical_metrics(y_test, y_pred, y_pred_proba)
 
-    logger.info(f"Medical metrics: sensitivity={metrics['sensitivity']:.4f}, "
-                f"specificity={metrics['specificity']:.4f}")
+    logger.info(
+        f"Medical metrics: sensitivity={metrics['sensitivity']:.4f}, "
+        f"specificity={metrics['specificity']:.4f}"
+    )
 
     return metrics
 

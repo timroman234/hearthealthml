@@ -109,9 +109,7 @@ def calculate_medical_metrics(
     return metrics
 
 
-def calculate_confusion_matrix_dict(
-    y_true: np.ndarray, y_pred: np.ndarray
-) -> dict:
+def calculate_confusion_matrix_dict(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
     """Calculate confusion matrix as a dictionary.
 
     Args:

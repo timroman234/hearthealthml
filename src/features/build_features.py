@@ -200,7 +200,17 @@ def engineer_features(
         )
 
     if create_risk_score:
-        required = ["age", "sex", "cp", "trestbps", "chol", "fbs", "exang", "oldpeak", "ca"]
+        required = [
+            "age",
+            "sex",
+            "cp",
+            "trestbps",
+            "chol",
+            "fbs",
+            "exang",
+            "oldpeak",
+            "ca",
+        ]
         if all(col in df.columns for col in required):
             df["cardiac_risk_score"] = calculate_cardiac_risk_score(df)
 

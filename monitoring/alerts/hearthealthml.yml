@@ -1,0 +1,60 @@
+# HeartHealthML alerting rules for Prometheus
+
+groups:
+  - name: hearthealthml
+    rules:
+      # High error rate alert
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(hearthealthml_requests_total{status=~"5.."}[5m])) /
+          sum(rate(hearthealthml_requests_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is above 5% for the last 5 minutes"
+
+      # High latency alert
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.95, rate(hearthealthml_prediction_latency_seconds_bucket[5m])) > 1.0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High prediction latency"
+          description: "95th percentile latency is above 1 second"
+
+      # API down alert
+      - alert: APIDown
+        expr: up{job="hearthealthml-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "HeartHealthML API is down"
+          description: "API has been unreachable for more than 1 minute"
+
+      # High risk predictions spike
+      - alert: HighRiskSpike
+        expr: |
+          rate(hearthealthml_predictions_total{risk_level="high"}[10m]) /
+          rate(hearthealthml_predictions_total[10m]) > 0.5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Unusual high-risk prediction rate"
+          description: "More than 50% of predictions are high-risk in last 10 minutes"
+
+      # No predictions (potential issue)
+      - alert: NoPredictions
+        expr: |
+          sum(rate(hearthealthml_predictions_total[15m])) == 0
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "No predictions made"
+          description: "No predictions have been made in the last 30 minutes"

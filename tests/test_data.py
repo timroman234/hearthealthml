@@ -9,7 +9,11 @@ import pytest
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.data.loader import EXPECTED_COLUMNS, get_data_info, load_raw_data, validate_schema
+from src.data.loader import (
+    get_data_info,
+    load_raw_data,
+    validate_schema,
+)
 from src.data.preprocessor import (
     check_missing_values,
     create_preprocessor,
@@ -25,22 +29,24 @@ class TestDataLoader:
     @pytest.fixture
     def sample_df(self):
         """Create a sample DataFrame for testing."""
-        return pd.DataFrame({
-            "age": [55, 45, 65],
-            "sex": [1, 0, 1],
-            "cp": [0, 1, 2],
-            "trestbps": [130, 120, 150],
-            "chol": [250, 200, 300],
-            "fbs": [0, 1, 0],
-            "restecg": [0, 1, 0],
-            "thalach": [150, 170, 130],
-            "exang": [0, 1, 0],
-            "oldpeak": [1.5, 0.5, 2.5],
-            "slope": [1, 0, 2],
-            "ca": [0, 1, 2],
-            "thal": [2, 1, 3],
-            "target": [1, 0, 1],
-        })
+        return pd.DataFrame(
+            {
+                "age": [55, 45, 65],
+                "sex": [1, 0, 1],
+                "cp": [0, 1, 2],
+                "trestbps": [130, 120, 150],
+                "chol": [250, 200, 300],
+                "fbs": [0, 1, 0],
+                "restecg": [0, 1, 0],
+                "thalach": [150, 170, 130],
+                "exang": [0, 1, 0],
+                "oldpeak": [1.5, 0.5, 2.5],
+                "slope": [1, 0, 2],
+                "ca": [0, 1, 2],
+                "thal": [2, 1, 3],
+                "target": [1, 0, 1],
+            }
+        )
 
     def test_load_raw_data_file_not_found(self):
         """Test that FileNotFoundError is raised for missing file."""
@@ -71,22 +77,24 @@ class TestPreprocessor:
     @pytest.fixture
     def sample_df(self):
         """Create a sample DataFrame for testing."""
-        return pd.DataFrame({
-            "age": [55, 45, 65, None],
-            "sex": [1, 0, 1, 1],
-            "cp": [0, 1, 2, 0],
-            "trestbps": [130, 120, 150, 140],
-            "chol": [250, 200, 300, 220],
-            "fbs": [0, 1, 0, 0],
-            "restecg": [0, 1, 0, 1],
-            "thalach": [150, 170, 130, 160],
-            "exang": [0, 1, 0, 0],
-            "oldpeak": [1.5, 0.5, 2.5, 1.0],
-            "slope": [1, 0, 2, 1],
-            "ca": [0, 1, 2, 0],
-            "thal": [2, 1, 3, 2],
-            "target": [1, 0, 1, 0],
-        })
+        return pd.DataFrame(
+            {
+                "age": [55, 45, 65, None],
+                "sex": [1, 0, 1, 1],
+                "cp": [0, 1, 2, 0],
+                "trestbps": [130, 120, 150, 140],
+                "chol": [250, 200, 300, 220],
+                "fbs": [0, 1, 0, 0],
+                "restecg": [0, 1, 0, 1],
+                "thalach": [150, 170, 130, 160],
+                "exang": [0, 1, 0, 0],
+                "oldpeak": [1.5, 0.5, 2.5, 1.0],
+                "slope": [1, 0, 2, 1],
+                "ca": [0, 1, 2, 0],
+                "thal": [2, 1, 3, 2],
+                "target": [1, 0, 1, 0],
+            }
+        )
 
     def test_check_missing_values(self, sample_df):
         """Test missing value detection."""
@@ -96,11 +104,13 @@ class TestPreprocessor:
 
     def test_detect_outliers_iqr(self):
         """Test outlier detection using IQR method."""
-        df = pd.DataFrame({
-            "value": [1, 2, 3, 4, 5, 100],  # 100 is an outlier
-        })
+        df = pd.DataFrame(
+            {
+                "value": [1, 2, 3, 4, 5, 100],  # 100 is an outlier
+            }
+        )
         outliers = detect_outliers(df, columns=["value"], method="iqr")
-        assert outliers["value"].iloc[-1] is True  # Last value is outlier
+        assert bool(outliers["value"].iloc[-1])  # Last value is outlier
 
     def test_validate_ranges_valid(self, sample_df):
         """Test range validation with valid data."""
@@ -110,10 +120,12 @@ class TestPreprocessor:
 
     def test_validate_ranges_invalid(self):
         """Test range validation with invalid data."""
-        df = pd.DataFrame({
-            "age": [-5],  # Invalid age
-            "sex": [2],   # Invalid sex
-        })
+        df = pd.DataFrame(
+            {
+                "age": [-5],  # Invalid age
+                "sex": [2],  # Invalid sex
+            }
+        )
         errors = validate_ranges(df)
         assert len(errors) > 0
 
@@ -130,11 +142,13 @@ class TestSplitter:
     @pytest.fixture
     def sample_df(self):
         """Create a sample DataFrame for testing."""
-        return pd.DataFrame({
-            "feature1": range(100),
-            "feature2": range(100, 200),
-            "target": [0] * 50 + [1] * 50,
-        })
+        return pd.DataFrame(
+            {
+                "feature1": range(100),
+                "feature2": range(100, 200),
+                "target": [0] * 50 + [1] * 50,
+            }
+        )
 
     def test_create_splits_ratios(self, sample_df):
         """Test that splits have correct sizes."""

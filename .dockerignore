@@ -1,0 +1,62 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv
+venv/
+ENV/
+env/
+
+# IDEs
+.vscode
+.idea
+*.swp
+*.swo
+
+# Development
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.coverage
+htmlcov/
+*.egg-info/
+
+# Project-specific dev files
+notebooks/
+tests/
+*.md
+!README.md
+
+# MLOps artifacts (mounted as volumes in production)
+mlruns/
+mlartifacts/
+mlflow.db
+logs/
+
+# DVC
+.dvc/cache
+.dvc/tmp
+
+# Environment files
+.env
+.env.*
+
+# Data files (mounted as volumes)
+data/raw/
+data/processed/
+data/splits/
+
+# Reports (mounted as volumes)
+reports/
+
+# Workspace files
+*.code-workspace
+
+# Lock files (rebuilt in container)
+uv.lock

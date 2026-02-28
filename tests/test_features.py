@@ -5,7 +5,6 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import pytest
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -74,17 +73,19 @@ class TestFeatureEngineering:
 
     def test_calculate_cardiac_risk_score_range(self):
         """Test that cardiac risk score is within expected range."""
-        df = pd.DataFrame({
-            "age": [55, 30, 70],
-            "sex": [1, 0, 1],
-            "cp": [0, 3, 0],
-            "trestbps": [145, 110, 160],
-            "chol": [250, 180, 280],
-            "fbs": [1, 0, 1],
-            "exang": [1, 0, 1],
-            "oldpeak": [3.0, 0.5, 4.0],
-            "ca": [2, 0, 3],
-        })
+        df = pd.DataFrame(
+            {
+                "age": [55, 30, 70],
+                "sex": [1, 0, 1],
+                "cp": [0, 3, 0],
+                "trestbps": [145, 110, 160],
+                "chol": [250, 180, 280],
+                "fbs": [1, 0, 1],
+                "exang": [1, 0, 1],
+                "oldpeak": [3.0, 0.5, 4.0],
+                "ca": [2, 0, 3],
+            }
+        )
 
         scores = calculate_cardiac_risk_score(df)
 
@@ -94,12 +95,14 @@ class TestFeatureEngineering:
 
     def test_create_interaction_features(self):
         """Test interaction feature creation."""
-        df = pd.DataFrame({
-            "age": [50, 60],
-            "thalach": [150, 140],
-            "oldpeak": [1.0, 2.0],
-            "slope": [1, 2],
-        })
+        df = pd.DataFrame(
+            {
+                "age": [50, 60],
+                "thalach": [150, 140],
+                "oldpeak": [1.0, 2.0],
+                "slope": [1, 2],
+            }
+        )
 
         pairs = [("age", "thalach"), ("oldpeak", "slope")]
         result = create_interaction_features(df, pairs)
@@ -111,21 +114,23 @@ class TestFeatureEngineering:
 
     def test_engineer_features(self):
         """Test full feature engineering."""
-        df = pd.DataFrame({
-            "age": [55, 45],
-            "sex": [1, 0],
-            "cp": [0, 1],
-            "trestbps": [140, 120],
-            "chol": [250, 190],
-            "fbs": [1, 0],
-            "restecg": [0, 1],
-            "thalach": [150, 170],
-            "exang": [1, 0],
-            "oldpeak": [2.0, 0.5],
-            "slope": [1, 0],
-            "ca": [1, 0],
-            "thal": [2, 1],
-        })
+        df = pd.DataFrame(
+            {
+                "age": [55, 45],
+                "sex": [1, 0],
+                "cp": [0, 1],
+                "trestbps": [140, 120],
+                "chol": [250, 190],
+                "fbs": [1, 0],
+                "restecg": [0, 1],
+                "thalach": [150, 170],
+                "exang": [1, 0],
+                "oldpeak": [2.0, 0.5],
+                "slope": [1, 0],
+                "ca": [1, 0],
+                "thal": [2, 1],
+            }
+        )
 
         result = engineer_features(df)
 
@@ -142,21 +147,25 @@ class TestFeatureSelection:
 
     def test_remove_correlated_features(self):
         """Test highly correlated feature removal."""
-        df = pd.DataFrame({
-            "a": [1, 2, 3, 4, 5],
-            "b": [1.01, 2.01, 3.01, 4.01, 5.01],  # Highly correlated with a
-            "c": [5, 4, 3, 2, 1],  # Negatively correlated
-        })
+        df = pd.DataFrame(
+            {
+                "a": [1, 2, 3, 4, 5],
+                "b": [1.01, 2.01, 3.01, 4.01, 5.01],  # Highly correlated with a
+                "c": [5, 4, 3, 2, 1],  # Negatively correlated
+            }
+        )
 
         to_drop = remove_correlated_features(df, threshold=0.99)
         assert "b" in to_drop or "a" in to_drop
 
     def test_select_by_variance(self):
         """Test low variance feature removal."""
-        df = pd.DataFrame({
-            "constant": [1, 1, 1, 1, 1],
-            "variable": [1, 2, 3, 4, 5],
-        })
+        df = pd.DataFrame(
+            {
+                "constant": [1, 1, 1, 1, 1],
+                "variable": [1, 2, 3, 4, 5],
+            }
+        )
 
         selected = select_by_variance(df, threshold=0.01)
         assert "variable" in selected

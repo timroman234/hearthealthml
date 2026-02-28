@@ -10,9 +10,7 @@ from src.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-def remove_correlated_features(
-    df: pd.DataFrame, threshold: float = 0.9
-) -> list[str]:
+def remove_correlated_features(df: pd.DataFrame, threshold: float = 0.9) -> list[str]:
     """Identify features to remove due to high correlation.
 
     Args:
@@ -26,9 +24,7 @@ def remove_correlated_features(
     numeric_df = df.select_dtypes(include=[np.number])
 
     corr_matrix = numeric_df.corr().abs()
-    upper = corr_matrix.where(
-        np.triu(np.ones(corr_matrix.shape), k=1).astype(bool)
-    )
+    upper = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
 
     to_drop = [col for col in upper.columns if any(upper[col] > threshold)]
 
@@ -40,9 +36,7 @@ def remove_correlated_features(
     return to_drop
 
 
-def select_by_variance(
-    df: pd.DataFrame, threshold: float = 0.01
-) -> list[str]:
+def select_by_variance(df: pd.DataFrame, threshold: float = 0.01) -> list[str]:
     """Select features with variance above threshold.
 
     Args:
@@ -151,10 +145,12 @@ def get_feature_importances(
     else:
         raise ValueError("Model must have coef_ or feature_importances_ attribute")
 
-    df = pd.DataFrame({
-        "feature": feature_names,
-        "importance": importances,
-    })
+    df = pd.DataFrame(
+        {
+            "feature": feature_names,
+            "importance": importances,
+        }
+    )
     df = df.sort_values("importance", ascending=False).reset_index(drop=True)
 
     return df
