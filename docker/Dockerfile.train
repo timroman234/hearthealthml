@@ -1,0 +1,51 @@
+# HeartHealthML Training Container
+# Multi-stage build for efficient training pipeline execution
+
+# =============================================================================
+# Stage 1: Builder - Install dependencies
+# =============================================================================
+FROM python:3.11-slim AS builder
+
+# Install uv for fast dependency management
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+# Set up working directory
+WORKDIR /app
+
+# Copy dependency files
+COPY pyproject.toml ./
+
+# Create virtual environment and install dependencies
+ENV UV_SYSTEM_PYTHON=1
+RUN uv pip install --system -r pyproject.toml
+
+# =============================================================================
+# Stage 2: Runtime - Training environment
+# =============================================================================
+FROM python:3.11-slim AS runtime
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app
+
+WORKDIR /app
+
+# Copy installed packages from builder
+COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+
+# Copy application code
+COPY src/ ./src/
+COPY configs/ ./configs/
+COPY main.py ./
+
+# Create directories for artifacts (can be mounted as volumes)
+RUN mkdir -p data/raw data/processed data/splits \
+    models reports/figures reports/metrics logs mlruns
+
+# Default command: run training pipeline
+ENTRYPOINT ["python", "main.py"]
+
+# Default arguments (can be overridden)
+CMD []

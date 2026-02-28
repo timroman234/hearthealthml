@@ -1,0 +1,89 @@
+# HeartHealthML Docker Compose Configuration
+# Usage:
+#   docker compose -f docker/docker-compose.yml up -d          # Start API + MLflow
+#   docker compose -f docker/docker-compose.yml --profile training up trainer  # Run training
+
+services:
+  # ==========================================================================
+  # MLflow Tracking Server
+  # ==========================================================================
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.9.2
+    container_name: hearthealthml-mlflow
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow-data:/mlflow
+      - ../mlruns:/mlflow/mlruns
+      - ../mlartifacts:/mlflow/mlartifacts
+    environment:
+      - MLFLOW_TRACKING_URI=sqlite:///mlflow/mlflow.db
+    command: >
+      mlflow server
+      --backend-store-uri sqlite:///mlflow/mlflow.db
+      --default-artifact-root /mlflow/mlartifacts
+      --host 0.0.0.0
+      --port 5000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  # ==========================================================================
+  # FastAPI Prediction Server
+  # ==========================================================================
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.serve
+    container_name: hearthealthml-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../models:/app/models:ro
+      - ../logs:/app/logs
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=INFO
+    depends_on:
+      mlflow:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+  # ==========================================================================
+  # Training Pipeline (on-demand)
+  # ==========================================================================
+  trainer:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.train
+    container_name: hearthealthml-trainer
+    profiles:
+      - training
+    volumes:
+      - ../data:/app/data
+      - ../models:/app/models
+      - ../reports:/app/reports
+      - ../logs:/app/logs
+      - ../mlruns:/app/mlruns
+    environment:
+      - PYTHONUNBUFFERED=1
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+    depends_on:
+      mlflow:
+        condition: service_healthy
+    # Override entrypoint args for specific training runs
+    # command: ["--tune"]
+
+volumes:
+  mlflow-data:
+    name: hearthealthml-mlflow-data
