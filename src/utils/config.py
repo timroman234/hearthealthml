@@ -1,7 +1,7 @@
 """Configuration management."""
 
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import yaml
 
@@ -32,7 +32,7 @@ def load_config(config_path: Path) -> dict:
         raise FileNotFoundError(f"Config file not found: {config_path}")
 
     with open(config_path) as f:
-        config = yaml.safe_load(f)
+        config = cast(dict[str, Any], yaml.safe_load(f))
 
     logger.info(f"Loaded config from {config_path}")
     return config

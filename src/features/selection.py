@@ -1,5 +1,7 @@
 """Feature selection methods."""
 
+from typing import cast
+
 import numpy as np
 import pandas as pd
 from sklearn.base import BaseEstimator
@@ -51,7 +53,7 @@ def select_by_variance(df: pd.DataFrame, threshold: float = 0.01) -> list[str]:
     selector = VarianceThreshold(threshold=threshold)
     selector.fit(numeric_df)
 
-    selected = numeric_df.columns[selector.get_support()].tolist()
+    selected = cast(list[str], numeric_df.columns[selector.get_support()].tolist())
     removed = set(numeric_df.columns) - set(selected)
 
     if removed:
@@ -83,7 +85,7 @@ def select_by_rfe(
     rfe = RFE(estimator, n_features_to_select=n_features, step=step)
     rfe.fit(X, y)
 
-    selected_indices = np.where(rfe.support_)[0].tolist()
+    selected_indices = cast(list[int], np.where(rfe.support_)[0].tolist())
     logger.info(f"RFE selected {len(selected_indices)} features")
 
     return selected_indices
@@ -118,7 +120,7 @@ def select_by_importance(
     # Normalize importances
     importances = importances / importances.sum()
 
-    selected_indices = np.where(importances > threshold)[0].tolist()
+    selected_indices = cast(list[int], np.where(importances > threshold)[0].tolist())
     logger.info(
         f"Selected {len(selected_indices)} features by importance threshold {threshold}"
     )

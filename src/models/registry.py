@@ -4,6 +4,7 @@ import json
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Any, cast
 
 import joblib
 from sklearn.base import BaseEstimator
@@ -44,7 +45,7 @@ class ModelRegistry:
         """Load registry from disk."""
         if self.registry_file.exists():
             with open(self.registry_file) as f:
-                return json.load(f)
+                return cast(dict[str, Any], json.load(f))
         return {"models": {}}
 
     def _save_registry(self) -> None:
@@ -62,7 +63,7 @@ class ModelRegistry:
             return "1.0.0"
 
         # Get latest version and increment
-        latest = sorted(versions.keys())[-1]
+        latest = cast(str, sorted(versions.keys())[-1])
         major, minor, patch = map(int, latest.split("."))
         return f"{major}.{minor}.{patch + 1}"
 
@@ -75,7 +76,7 @@ class ModelRegistry:
         if not versions:
             raise ValueError(f"No versions found for model: {model_name}")
 
-        return sorted(versions.keys())[-1]
+        return cast(str, sorted(versions.keys())[-1])
 
     def register_model(
         self,
@@ -172,7 +173,7 @@ class ModelRegistry:
 
         model_dir = self.registry_path / f"{model_name}_v{version}"
         with open(model_dir / "metrics.json") as f:
-            return json.load(f)
+            return cast(dict[str, Any], json.load(f))
 
     def load_metadata(self, model_name: str, version: str = "latest") -> dict:
         """Load metadata for a model version.
@@ -189,7 +190,7 @@ class ModelRegistry:
 
         model_dir = self.registry_path / f"{model_name}_v{version}"
         with open(model_dir / "metadata.json") as f:
-            return json.load(f)
+            return cast(dict[str, Any], json.load(f))
 
     def list_models(self) -> list[str]:
         """List all registered model names."""
@@ -214,4 +215,4 @@ class ModelRegistry:
         if version == "latest":
             version = self._get_latest_version(model_name)
 
-        return self.registry["models"][model_name][version]
+        return cast(dict[str, Any], self.registry["models"][model_name][version])

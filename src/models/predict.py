@@ -1,6 +1,7 @@
 """Inference logic."""
 
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 import pandas as pd
@@ -140,4 +141,4 @@ def predict_proba(
         Array of probabilities for positive class.
     """
     X = preprocessor.transform(df)
-    return model.predict_proba(X)[:, 1]
+    return cast(np.ndarray, model.predict_proba(X)[:, 1])

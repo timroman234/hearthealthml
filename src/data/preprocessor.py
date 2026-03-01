@@ -1,6 +1,7 @@
 """Data preprocessing and validation."""
 
 from pathlib import Path
+from typing import Any, cast
 
 import joblib
 import numpy as np
@@ -47,7 +48,7 @@ def check_missing_values(df: pd.DataFrame) -> dict[str, int]:
         Dictionary mapping column names to missing counts.
     """
     missing = df.isnull().sum()
-    missing_dict = missing[missing > 0].to_dict()
+    missing_dict = cast(dict[str, int], missing[missing > 0].to_dict())
 
     if missing_dict:
         logger.warning(f"Missing values found: {missing_dict}")
@@ -119,26 +120,28 @@ def validate_ranges(df: pd.DataFrame, rules: dict | None = None) -> list[str]:
         if col not in df.columns:
             continue
 
-        if "values" in rule:
-            invalid = ~df[col].isin(rule["values"])
+        rule_dict = cast(dict[str, Any], rule)
+
+        if "values" in rule_dict:
+            invalid = ~df[col].isin(rule_dict["values"])
             if invalid.any():
                 bad_values = df.loc[invalid, col].unique().tolist()
                 errors.append(
-                    f"{col}: invalid values {bad_values}, expected {rule['values']}"
+                    f"{col}: invalid values {bad_values}, expected {rule_dict['values']}"
                 )
 
-        if "min" in rule:
-            below_min = df[col] < rule["min"]
+        if "min" in rule_dict:
+            below_min = df[col] < rule_dict["min"]
             if below_min.any():
                 errors.append(
-                    f"{col}: {below_min.sum()} values below minimum {rule['min']}"
+                    f"{col}: {below_min.sum()} values below minimum {rule_dict['min']}"
                 )
 
-        if "max" in rule:
-            above_max = df[col] > rule["max"]
+        if "max" in rule_dict:
+            above_max = df[col] > rule_dict["max"]
             if above_max.any():
                 errors.append(
-                    f"{col}: {above_max.sum()} values above maximum {rule['max']}"
+                    f"{col}: {above_max.sum()} values above maximum {rule_dict['max']}"
                 )
 
     if errors:
@@ -230,7 +233,7 @@ def fit_transform_preprocessor(
     Returns:
         Transformed numpy array.
     """
-    X = preprocessor.fit_transform(df)
+    X = cast(np.ndarray, preprocessor.fit_transform(df))
     logger.info(f"Transformed data shape: {X.shape}")
     return X
 
@@ -247,7 +250,7 @@ def transform_preprocessor(
     Returns:
         Transformed numpy array.
     """
-    return preprocessor.transform(df)
+    return cast(np.ndarray, preprocessor.transform(df))
 
 
 def save_preprocessor(preprocessor: ColumnTransformer, path: Path) -> None:

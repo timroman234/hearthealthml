@@ -115,7 +115,7 @@ class ModelPerformanceMonitor:
             return stats
 
         # Calculate z-scores for drift detection
-        if self.baseline_std_prob > 0:
+        if self.baseline_std_prob is not None and self.baseline_std_prob > 0:
             prob_drift = (
                 abs(stats["mean_probability"] - self.baseline_mean_prob)
                 / self.baseline_std_prob
@@ -123,7 +123,9 @@ class ModelPerformanceMonitor:
         else:
             prob_drift = 0.0
 
-        rate_drift = abs(stats["positive_rate"] - self.baseline_positive_rate)
+        rate_drift = abs(
+            stats["positive_rate"] - (self.baseline_positive_rate or 0.0)
+        )
 
         drift_detected = prob_drift > threshold or rate_drift > 0.1
 
