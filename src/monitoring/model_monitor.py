@@ -123,9 +123,7 @@ class ModelPerformanceMonitor:
         else:
             prob_drift = 0.0
 
-        rate_drift = abs(
-            stats["positive_rate"] - (self.baseline_positive_rate or 0.0)
-        )
+        rate_drift = abs(stats["positive_rate"] - (self.baseline_positive_rate or 0.0))
 
         drift_detected = prob_drift > threshold or rate_drift > 0.1
 
