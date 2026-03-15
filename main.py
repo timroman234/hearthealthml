@@ -35,7 +35,12 @@ from src.evaluation.evaluate import (
 )
 from src.features.build_features import engineer_features
 from src.models.registry import ModelRegistry
-from src.models.train import get_model, train_model, tune_hyperparameters
+from src.models.train import (
+    DEFAULT_PARAMS,
+    get_model,
+    train_model,
+    tune_hyperparameters,
+)
 from src.utils.config import get_config
 from src.utils.logger import setup_logger
 
@@ -87,6 +92,9 @@ def main(config_path: str | None = None, tune: bool = False) -> dict:
         mlflow.log_param("model_type", config["training"]["default_model"])
         mlflow.log_param("scaler", config["preprocessing"]["scaler"])
         mlflow.log_param("cv_folds", config["training"]["cv_folds"])
+        mlflow.log_param(
+            "class_weight", DEFAULT_PARAMS["logistic_regression"].get("class_weight")
+        )
 
         # Stage 1: Data Loading
         logger.info("Stage 1: Loading data")
