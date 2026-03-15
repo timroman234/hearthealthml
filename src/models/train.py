@@ -26,6 +26,7 @@ DEFAULT_PARAMS = {
         "solver": "liblinear",
         "max_iter": 200,
         "random_state": 42,
+        "class_weight": "balanced",
     },
 }
 
